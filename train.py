@@ -12,12 +12,12 @@ from HAN import HierarchicalAttention
 def get_args():
     parser = argparse.ArgumentParser(
         """Implementation of the model described in the paper: Hierarchical Attention Networks for Document Classification""")
-    parser.add_argument("--batch_size", type=int, default=128)
+    parser.add_argument("--batch_size", type=int, default=2048)
     parser.add_argument("--num_epoches", type=int, default=100)
     parser.add_argument("--lr", type=float, default=0.1)
     parser.add_argument("--momentum", type=float, default=0.9)
-    parser.add_argument("--word_hidden_size", type=int, default=50)
-    parser.add_argument("--sent_hidden_size", type=int, default=50)
+    parser.add_argument("--word_hidden_size", type=int, default=100)
+    parser.add_argument("--sent_hidden_size", type=int, default=100)
     parser.add_argument("--es_min_delta", type=float, default=0.0,
                         help="Early stopping's parameter: minimum change loss to qualify as an improvement")
     parser.add_argument("--es_patience", type=int, default=5,
@@ -69,7 +69,7 @@ def train(opt):
         model.to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=opt.lr, momentum=opt.momentum)
+    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=opt.lr)
     best_loss = 1e5
     best_epoch = 0
     model.train()
@@ -81,19 +81,18 @@ def train(opt):
                 feature = feature.cuda()
                 label = label.cuda()
             optimizer.zero_grad()
-            model._init_hidden_state()
+            model._init_hidden_state(feature.shape[0])
             predictions = model(feature)
             loss = criterion(predictions, label)
             loss.backward()
             optimizer.step()
-            training_metrics = get_evaluation(label.cpu().numpy(), predictions.cpu().detach().numpy(), list_metrics=["accuracy"])
-            print("Epoch: {}/{}, Iteration: {}/{}, Lr: {}, Loss: {}, Accuracy: {}".format(
-                epoch + 1,
-                opt.num_epoches,
-                iter + 1,
-                num_iter_per_epoch,
-                optimizer.param_groups[0]['lr'],
-                loss, training_metrics["accuracy"]))
+        training_metrics = get_evaluation(label.cpu().numpy(), predictions.cpu().detach().numpy(), list_metrics=["accuracy"])
+        print("Epoch: {}/{}, Lr: {}, Loss: {}, Accuracy: {}".format(
+            epoch + 1,
+            opt.num_epoches,
+            num_iter_per_epoch,
+            optimizer.param_groups[0]['lr'],
+            loss, training_metrics["accuracy"]))
 
         if epoch % opt.test_interval == 0:
             model.eval()

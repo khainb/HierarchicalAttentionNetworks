@@ -29,9 +29,9 @@ class HierarchicalAttention(nn.Module):
         output_list = []
         input = input.permute(1, 0, 2) #input [doclen,batch_size,sent_len]
         for i in input:
-            output, self.word_hidden_state = self.word_att_net(i.permute(1, 0), self.word_hidden_state) # [1,batch_size,word_hidden_size]
+            output, self.word_hidden_state = self.word_att(i.permute(1, 0), self.word_hidden_state) # [1,batch_size,word_hidden_size]
             output_list.append(output)
         output = torch.cat(output_list, 0) #output [doclen,batch_size,word_hidden_size]
-        output, self.sent_hidden_state = self.sent_att_net(output, self.sent_hidden_state) # [batch_size,num_classes]
+        output, self.sent_hidden_state = self.sent_att(output, self.sent_hidden_state) # [batch_size,num_classes]
 
         return output

@@ -12,10 +12,11 @@ def mat_mul(input, weight, bias=False):
         feature = torch.mm(feature, weight)
         if isinstance(bias, nn.parameter.Parameter):
             feature = feature + bias.expand(feature.size()[0], bias.size()[1])
+
         feature = torch.tanh(feature).unsqueeze(0)
         feature_list.append(feature)
-
-    return torch.cat(feature_list, 0).squeeze()
+    result= torch.cat(feature_list, 0).squeeze()
+    return result
 def element_wise_mul(input1, input2):
 
     feature_list = []

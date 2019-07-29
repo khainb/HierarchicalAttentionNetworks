@@ -40,4 +40,4 @@ class Custom_Dataset(Dataset):
         document_encode = np.stack(arrays=document_encode, axis=0)
 
 
-        return document_encode.astype(np.int64), label
+        return document_encode.astype(np.int64), label-1
