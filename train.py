@@ -133,7 +133,7 @@ def train(opt):
             vl_pred_ls=[]
             for vl_feature,vl_label in valid_generator:
                 num_sample=len(vl_label)
-                if torch.cuda.is_avaliable():
+                if torch.cuda.is_available():
                     vl_feature=vl_feature.to(device)
                     vl_label=vl_label.to(device)
                 with torch.no_grad():
