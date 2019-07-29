@@ -6,9 +6,10 @@ from utils import get_max_lengths,get_evaluation,get_pretrained_word_embedding,r
 import argparse
 import shutil
 import numpy as np
-from torch.utils.data.sampler import SubsetRandomSampler
+from sklearn.model_selection import StratifiedShuffleSplit
 from Dataset import Custom_Dataset
 from HAN import HierarchicalAttention
+import pandas as pd
 def get_args():
     parser = argparse.ArgumentParser(
         """Implementation of the model described in the paper: Hierarchical Attention Networks for Document Classification""")
@@ -51,22 +52,21 @@ def train(opt):
     max_word_length, max_sent_length=13,24
     vocab = read_vocab('data/yelp_review_full_csv/train.csv.txt')
     emb,word_to_ix= get_pretrained_word_embedding(opt.word2vec_path,vocab)
-    training_set = Custom_Dataset(opt.train_set, word_to_ix, max_sent_length, max_word_length)
-    # Creating data indices for training and validation splits:
-    validation_split = .2
-    dataset_size = len(training_set.labels)
-    indices = list(range(dataset_size))
-    split = int(np.floor(validation_split * dataset_size))
-    np.random.shuffle(indices)
-    train_indices, val_indices = indices[split:], indices[:split]
-    valid_set = Custom_Dataset(opt.train_set, word_to_ix, max_sent_length, max_word_length)
-    valid_set.texts =training_set.texts[val_indices]
-    valid_set.labels= training_set.labels[val_indices]
-    training_set.texts =training_set.texts[train_indices]
-    training_set.labels= training_set.labels[train_indices]
+    df = pd.read_csv(opt.train_set,names=['label','text'])
+    texts = np.array(df['text'])
+    labels = np.array(df['label'])
+    sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=0)
+    for train_index, test_index in sss.split(texts, labels):
+        X_train, X_valid = texts[train_index], texts[test_index]
+        y_train, y_valid = labels[train_index], labels[test_index]
+    training_set = Custom_Dataset(X_train,y_train, word_to_ix, max_sent_length, max_word_length)
+    valid_set = Custom_Dataset(X_valid,y_valid, word_to_ix, max_sent_length, max_word_length)
     training_generator = DataLoader(training_set,num_workers=32, **training_params)
     valid_generator = DataLoader(valid_set,num_workers=32, **training_params)
-    test_set = Custom_Dataset(opt.test_set, word_to_ix, max_sent_length, max_word_length)
+    df_test = pd.read_csv(opt.test_set,names=['label','text'])
+    test_texts = np.array(df_test['text'])
+    test_labels = np.array(df_test['label'])
+    test_set = Custom_Dataset(test_texts,test_labels, word_to_ix, max_sent_length, max_word_length)
     test_generator = DataLoader(test_set,num_workers=32, **test_params)
 
     model =nn.DataParallel( HierarchicalAttention(opt.word_hidden_size, opt.sent_hidden_size, opt.batch_size, training_set.num_classes,

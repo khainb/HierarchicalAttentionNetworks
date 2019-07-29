@@ -5,12 +5,11 @@ from utils import get_pretrained_word_embedding,read_vocab
 import numpy as np
 from torch.utils.data import Dataset
 class Custom_Dataset(Dataset):
-    def __init__(self,csv_file,word_to_ix, max_length_sentences=30, max_length_word=35):
+    def __init__(self,texts,labels,word_to_ix, max_length_sentences=30, max_length_word=35):
         super(Custom_Dataset, self).__init__()
         self.word_to_ix=word_to_ix
-        df=pd.read_csv(csv_file,names=['label','text'])
-        self.texts = np.array(df['text'])
-        self.labels = np.array(df['label'])
+        self.texts = texts
+        self.labels = labels
         self.max_length_sentences = max_length_sentences
         self.max_length_word = max_length_word
         self.num_classes = len(set(self.labels))
