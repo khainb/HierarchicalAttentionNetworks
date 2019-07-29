@@ -142,7 +142,7 @@ def train(opt):
                 vl_loss_ls.append(vl_loss * num_sample)
                 vl_label_ls.extend(vl_label.clone().cpu())
                 vl_pred_ls.append(vl_predictions.clone().cpu())
-            vl_loss = sum(vl_loss_ls) / split
+            vl_loss = sum(vl_loss_ls) / valid_set.__len__()
             vl_pred = torch.cat(vl_pred_ls, 0)
             vl_label = np.array(vl_label_ls)
             vl_metrics = get_evaluation(vl_label, vl_pred.numpy(), list_metrics=["accuracy", "confusion_matrix"])
