@@ -6,26 +6,26 @@ from utils import get_max_lengths,get_evaluation,get_pretrained_word_embedding,r
 import argparse
 import shutil
 import numpy as np
-
+from torch.utils.data.sampler import SubsetRandomSampler
 from Dataset import Custom_Dataset
 from HAN import HierarchicalAttention
 def get_args():
     parser = argparse.ArgumentParser(
         """Implementation of the model described in the paper: Hierarchical Attention Networks for Document Classification""")
-    parser.add_argument("--batch_size", type=int, default=2048)
+    parser.add_argument("--batch_size", type=int, default=13788)
     parser.add_argument("--num_epoches", type=int, default=100)
-    parser.add_argument("--lr", type=float, default=0.1)
+    parser.add_argument("--lr", type=float, default=0.01)
     parser.add_argument("--momentum", type=float, default=0.9)
-    parser.add_argument("--word_hidden_size", type=int, default=100)
-    parser.add_argument("--sent_hidden_size", type=int, default=100)
+    parser.add_argument("--word_hidden_size", type=int, default=50)
+    parser.add_argument("--sent_hidden_size", type=int, default=50)
     parser.add_argument("--es_min_delta", type=float, default=0.0,
                         help="Early stopping's parameter: minimum change loss to qualify as an improvement")
-    parser.add_argument("--es_patience", type=int, default=5,
+    parser.add_argument("--es_patience", type=int, default=10,
                         help="Early stopping's parameter: number of epochs with no improvement after which training will be stopped. Set to 0 to disable this technique.")
     parser.add_argument("--train_set", type=str, default="data/yelp_review_full_csv/train.csv")
     parser.add_argument("--test_set", type=str, default="data/yelp_review_full_csv/test.csv")
     parser.add_argument("--test_interval", type=int, default=1, help="Number of epoches between testing phases")
-    parser.add_argument("--word2vec_path", type=str, default="glove/glove.6B/glove.6B.100d.txt")
+    parser.add_argument("--word2vec_path", type=str, default="glove/glove.6B/glove.6B.200d.txt")
     parser.add_argument("--log_path", type=str, default="tensorboard/han_voc")
     parser.add_argument("--saved_path", type=str, default="trained_models")
     args = parser.parse_args()
@@ -52,9 +52,22 @@ def train(opt):
     vocab = read_vocab('data/yelp_review_full_csv/train.csv.txt')
     emb,word_to_ix= get_pretrained_word_embedding(opt.word2vec_path,vocab)
     training_set = Custom_Dataset(opt.train_set, word_to_ix, max_sent_length, max_word_length)
-    training_generator = DataLoader(training_set, **training_params)
+    # Creating data indices for training and validation splits:
+    validation_split = .2
+    dataset_size = len(training_set.labels)
+    indices = list(range(dataset_size))
+    split = int(np.floor(validation_split * dataset_size))
+    np.random.shuffle(indices)
+    train_indices, val_indices = indices[split:], indices[:split]
+    valid_set = Custom_Dataset(opt.train_set, word_to_ix, max_sent_length, max_word_length)
+    valid_set.texts =training_set.texts[val_indices]
+    valid_set.labels= training_set.labels[val_indices]
+    training_set.texts =training_set.texts[train_indices]
+    training_set.labels= training_set.labels[train_indices]
+    training_generator = DataLoader(training_set,num_workers=32, **training_params)
+    valid_generator = DataLoader(valid_set,num_workers=32, **training_params)
     test_set = Custom_Dataset(opt.test_set, word_to_ix, max_sent_length, max_word_length)
-    test_generator = DataLoader(test_set, **test_params)
+    test_generator = DataLoader(test_set,num_workers=32, **test_params)
 
     model =nn.DataParallel( HierarchicalAttention(opt.word_hidden_size, opt.sent_hidden_size, opt.batch_size, training_set.num_classes,
                        emb, max_sent_length, max_word_length))
@@ -71,7 +84,8 @@ def train(opt):
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=opt.lr)
-    best_loss = 1e5
+    scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=5, verbose=True,min_lr=1e-8)
+    best_acc=0.
     best_epoch = 0
     model.train()
     num_iter_per_epoch = len(training_generator)
@@ -91,7 +105,6 @@ def train(opt):
         print("Epoch: {}/{}, Lr: {}, Loss: {}, Accuracy: {}".format(
             epoch + 1,
             opt.num_epoches,
-            num_iter_per_epoch,
             optimizer.param_groups[0]['lr'],
             loss, training_metrics["accuracy"]))
 
@@ -115,20 +128,44 @@ def train(opt):
             te_pred = torch.cat(te_pred_ls, 0)
             te_label = np.array(te_label_ls)
             test_metrics = get_evaluation(te_label, te_pred.numpy(), list_metrics=["accuracy", "confusion_matrix"])
+            vl_loss_ls=[]
+            vl_label_ls=[]
+            vl_pred_ls=[]
+            for vl_feature,vl_label in valid_generator:
+                num_sample=len(vl_label)
+                if torch.cuda.is_avaliable():
+                    vl_feature=vl_feature.to(device)
+                    vl_label=vl_label.to(device)
+                with torch.no_grad():
+                    vl_predictions=model(vl_feature)
+                vl_loss = criterion(vl_predictions, vl_label)
+                vl_loss_ls.append(vl_loss * num_sample)
+                vl_label_ls.extend(te_label.clone().cpu())
+                vl_pred_ls.append(te_predictions.clone().cpu())
+            vl_loss = sum(vl_loss_ls) / split
+            vl_pred = torch.cat(vl_pred_ls, 0)
+            vl_label = np.array(vl_label_ls)
+            vl_metrics = get_evaluation(vl_label, vl_pred.numpy(), list_metrics=["accuracy", "confusion_matrix"])
+
             output_file.write(
-                "Epoch: {}/{} \nTest loss: {} Test accuracy: {} \nTest confusion matrix: \n{}\n\n".format(
+                    "Epoch: {}/{} \nValid loss: {} Valid accuracy: {} \nValid confusion matrix: \n{}\nTest loss: {} Test accuracy: {} \nTest confusion matrix: \n{}\n\n".format(
                     epoch + 1, opt.num_epoches,
+                    vl_loss,
+                    vl_metrics["accuracy"],
+                    vl_metrics["confusion_matrix"],
                     te_loss,
                     test_metrics["accuracy"],
                     test_metrics["confusion_matrix"]))
-            print("Epoch: {}/{}, Lr: {}, Loss: {}, Accuracy: {}".format(
+            print("Epoch: {}/{}, Lr: {},Valid Loss: {}, Valid Accuracy: {}, Test Loss: {}, Test Accuracy: {}".format(
                 epoch + 1,
                 opt.num_epoches,
                 optimizer.param_groups[0]['lr'],
+                vl_loss,vl_metrics["accuracy"],
                 te_loss, test_metrics["accuracy"]))
+            scheduler.step(vl_metrics["accuracy"])
             model.train()
-            if te_loss + opt.es_min_delta < best_loss:
-                best_loss = te_loss
+            if vl_metrics["accuracy"] > best_acc:
+                best_acc=vl_metrics["accuracy"]
                 best_epoch = epoch
                 torch.save(model, opt.saved_path + os.sep + "whole_model_han")
 

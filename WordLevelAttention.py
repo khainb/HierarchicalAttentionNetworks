@@ -11,7 +11,7 @@ class WordLevelAttention(nn.Module):
         self.word_bias = nn.Parameter(torch.Tensor(1, 2 * hidden_size))
         self.context_weight = nn.Parameter(torch.Tensor(2 * hidden_size, 1))
         device = torch.device("cuda" if (torch.cuda.is_available()) else "cpu")
-        self.lookup = nn.Embedding.from_pretrained(torch.from_numpy(word_emb).to(device))
+        self.lookup = nn.Embedding.from_pretrained(torch.from_numpy(word_emb).to(device),freeze=False)
         self.gru= nn.GRU(emb_size, hidden_size, bidirectional=True)
         self._create_weights(mean=0.0, std=0.05)
 
