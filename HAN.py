@@ -25,6 +25,7 @@ class HierarchicalAttention(nn.Module):
             self.sent_hidden_state = self.sent_hidden_state.to(device)
 
     def forward(self, input):#input [batch_size,doclen,sent_len]
+        self._init_hidden_state(input.shape[0])
 
         output_list = []
         input = input.permute(1, 0, 2) #input [doclen,batch_size,sent_len]

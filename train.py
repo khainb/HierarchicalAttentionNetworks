@@ -56,8 +56,9 @@ def train(opt):
     test_set = Custom_Dataset(opt.test_set, word_to_ix, max_sent_length, max_word_length)
     test_generator = DataLoader(test_set, **test_params)
 
-    model = HierarchicalAttention(opt.word_hidden_size, opt.sent_hidden_size, opt.batch_size, training_set.num_classes,
-                       emb, max_sent_length, max_word_length)
+    model =nn.DataParallel( HierarchicalAttention(opt.word_hidden_size, opt.sent_hidden_size, opt.batch_size, training_set.num_classes,
+                       emb, max_sent_length, max_word_length))
+    
 
 
     if os.path.isdir(opt.log_path):
@@ -76,12 +77,12 @@ def train(opt):
     num_iter_per_epoch = len(training_generator)
 
     for epoch in range(opt.num_epoches):
+        print("Epoch "+str(epoch))
         for iter, (feature, label) in enumerate(training_generator):
             if torch.cuda.is_available():
-                feature = feature.cuda()
-                label = label.cuda()
+                feature = feature.to(device)
+                label = label.to(device)
             optimizer.zero_grad()
-            model._init_hidden_state(feature.shape[0])
             predictions = model(feature)
             loss = criterion(predictions, label)
             loss.backward()
@@ -102,10 +103,9 @@ def train(opt):
             for te_feature, te_label in test_generator:
                 num_sample = len(te_label)
                 if torch.cuda.is_available():
-                    te_feature = te_feature.cuda()
-                    te_label = te_label.cuda()
+                    te_feature = te_feature.to(device)
+                    te_label = te_label.to(device)
                 with torch.no_grad():
-                    model._init_hidden_state(num_sample)
                     te_predictions = model(te_feature)
                 te_loss = criterion(te_predictions, te_label)
                 loss_ls.append(te_loss * num_sample)
