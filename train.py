@@ -140,8 +140,8 @@ def train(opt):
                     vl_predictions=model(vl_feature)
                 vl_loss = criterion(vl_predictions, vl_label)
                 vl_loss_ls.append(vl_loss * num_sample)
-                vl_label_ls.extend(te_label.clone().cpu())
-                vl_pred_ls.append(te_predictions.clone().cpu())
+                vl_label_ls.extend(vl_label.clone().cpu())
+                vl_pred_ls.append(vl_predictions.clone().cpu())
             vl_loss = sum(vl_loss_ls) / split
             vl_pred = torch.cat(vl_pred_ls, 0)
             vl_label = np.array(vl_label_ls)
