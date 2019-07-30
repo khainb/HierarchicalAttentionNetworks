@@ -92,12 +92,14 @@ def train(opt):
 
     for epoch in range(opt.num_epoches):
         print("Epoch "+str(epoch))
-        for iter, (feature, label) in enumerate(training_generator):
+        for feature, label,doc_len,sent_len in training_generator:
             if torch.cuda.is_available():
+                sent_len = torch.stack(sent_len,dim=1).to(device)
+                doc_len = doc_len.to(device)
                 feature = feature.to(device)
                 label = label.to(device)
             optimizer.zero_grad()
-            predictions = model(feature)
+            predictions = model(feature,sent_len,doc_len)
             loss = criterion(predictions, label)
             loss.backward()
             optimizer.step()
@@ -113,13 +115,16 @@ def train(opt):
             loss_ls = []
             te_label_ls = []
             te_pred_ls = []
-            for te_feature, te_label in test_generator:
+            for te_feature, te_label,te_doc_len,te_sent_len in test_generator:
                 num_sample = len(te_label)
                 if torch.cuda.is_available():
+                    te_sent_len = torch.stack(te_sent_len,dim=1).to(device)
+                    te_doc_len = te_doc_len.to(device)
                     te_feature = te_feature.to(device)
                     te_label = te_label.to(device)
+
                 with torch.no_grad():
-                    te_predictions = model(te_feature)
+                    te_predictions = model(te_feature,te_sent_len,te_doc_len)
                 te_loss = criterion(te_predictions, te_label)
                 loss_ls.append(te_loss * num_sample)
                 te_label_ls.extend(te_label.clone().cpu())
@@ -131,13 +136,15 @@ def train(opt):
             vl_loss_ls=[]
             vl_label_ls=[]
             vl_pred_ls=[]
-            for vl_feature,vl_label in valid_generator:
+            for vl_feature,vl_label,vl_doc_len,vl_sent_len in valid_generator:
                 num_sample=len(vl_label)
                 if torch.cuda.is_available():
+                    vl_sent_len = torch.stack(vl_sent_len,dim=1).to(device)
+                    vl_doc_len = vl_doc_len.to(device)
                     vl_feature=vl_feature.to(device)
                     vl_label=vl_label.to(device)
                 with torch.no_grad():
-                    vl_predictions=model(vl_feature)
+                    vl_predictions=model(vl_feature,vl_sent_len,vl_doc_len)
                 vl_loss = criterion(vl_predictions, vl_label)
                 vl_loss_ls.append(vl_loss * num_sample)
                 vl_label_ls.extend(vl_label.clone().cpu())

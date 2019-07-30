@@ -19,14 +19,20 @@ class Custom_Dataset(Dataset):
     def __getitem__(self, index):
         label = self.labels[index]
         text = self.texts[index]
+        list_sent =sent_tokenize(text=text)
         document_encode = [
             [self.word_to_ix[word] if word in self.word_to_ix.keys() else 0 for word in word_tokenize(text=sentences.replace("\n"," ").replace("\\n"," "))]
-            for sentences in sent_tokenize(text=text)]
-
+            for sentences in list_sent]
+        doc_len = len(sent_tokenize(text=text))
+        sent_len=[len(word_tokenize(text=sentences.replace("\n"," ").replace("\\n"," "))) for sentences in list_sent]
+        if(len(sent_len)<self.max_length_sentences):
+            for _ in range(self.max_length_sentences - len(sent_len)):
+                sent_len.append(0)
         for sentences in document_encode:
             if len(sentences) < self.max_length_word:
                 extended_words = [0 for _ in range(self.max_length_word - len(sentences))]
                 sentences.extend(extended_words)
+                
 
         if len(document_encode) < self.max_length_sentences:
             extended_sentences = [[0 for _ in range(self.max_length_word)] for _ in
@@ -37,6 +43,4 @@ class Custom_Dataset(Dataset):
                           :self.max_length_sentences]
 
         document_encode = np.stack(arrays=document_encode, axis=0)
-
-
-        return document_encode.astype(np.int64), label-1
+        return document_encode.astype(np.int64), label-1,doc_len,sent_len
